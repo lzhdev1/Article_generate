@@ -1,0 +1,16 @@
+# ===== Frontend =====
+FROM node:20-alpine AS frontend-deps
+
+WORKDIR /app
+
+COPY frontend/package.json frontend/package-lock.json* ./
+RUN npm ci
+
+# ===== Frontend Dev =====
+FROM frontend-deps AS frontend-dev
+
+COPY frontend/ .
+
+EXPOSE 3000
+
+CMD ["npm", "run", "dev"]

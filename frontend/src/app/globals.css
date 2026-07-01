@@ -1,0 +1,130 @@
+@import "tailwindcss";
+
+:root {
+  /* 主色调 - 科技蓝紫 */
+  --primary-50: #f0f4ff;
+  --primary-100: #dbe4ff;
+  --primary-200: #bac8ff;
+  --primary-300: #91a7ff;
+  --primary-400: #748ffc;
+  --primary-500: #5c7cfa;
+  --primary-600: #4c6ef5;
+  --primary-700: #4263eb;
+  --primary-800: #3b5bdb;
+  --primary-900: #364fc7;
+
+  /* 辅助色 - 青绿 */
+  --accent-50: #e6fcf5;
+  --accent-100: #c3fae8;
+  --accent-200: #96f2d7;
+  --accent-300: #63e6be;
+  --accent-400: #38d9a9;
+  --accent-500: #20c997;
+  --accent-600: #12b886;
+  --accent-700: #0ca678;
+
+  /* 功能色 */
+  --success: #10b981;
+  --warning: #f59e0b;
+  --error: #ef4444;
+
+  /* 中性色 */
+  --background: #ffffff;
+  --foreground: #0f172a;
+  --muted: #f1f5f9;
+  --muted-foreground: #64748b;
+  --border: #e2e8f0;
+  --ring: #5c7cfa;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-ring: var(--ring);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-error: var(--error);
+
+  /* 主色 */
+  --color-primary-50: var(--primary-50);
+  --color-primary-100: var(--primary-100);
+  --color-primary-200: var(--primary-200);
+  --color-primary-300: var(--primary-300);
+  --color-primary-400: var(--primary-400);
+  --color-primary-500: var(--primary-500);
+  --color-primary-600: var(--primary-600);
+  --color-primary-700: var(--primary-700);
+  --color-primary-800: var(--primary-800);
+  --color-primary-900: var(--primary-900);
+  --color-primary: var(--primary-500);
+
+  /* 辅助色 */
+  --color-accent-50: var(--accent-50);
+  --color-accent-100: var(--accent-100);
+  --color-accent-200: var(--accent-200);
+  --color-accent-300: var(--accent-300);
+  --color-accent-400: var(--accent-400);
+  --color-accent-500: var(--accent-500);
+  --color-accent-600: var(--accent-600);
+  --color-accent-700: var(--accent-700);
+  --color-accent: var(--accent-500);
+
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* 背景网格 */
+.bg-grid {
+  background-image:
+    linear-gradient(to right, rgba(128, 128, 128, 0.07) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(128, 128, 128, 0.07) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* 渐变光效 */
+.bg-mesh {
+  background:
+    radial-gradient(at 40% 20%, rgba(92, 124, 250, 0.15) 0px, transparent 50%),
+    radial-gradient(at 80% 0%, rgba(32, 201, 151, 0.1) 0px, transparent 50%),
+    radial-gradient(at 0% 50%, rgba(92, 124, 250, 0.1) 0px, transparent 50%);
+}
+
+/* 渐变文字 */
+.text-gradient {
+  background: linear-gradient(135deg, #5c7cfa 0%, #4c6ef5 50%, #20c997 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* 动画 */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.5s ease-out forwards;
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.animate-shimmer {
+  background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+  background-size: 200% 100%;
+  animation: shimmer 2s linear infinite;
+}
