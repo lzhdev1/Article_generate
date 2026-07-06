@@ -1,6 +1,8 @@
 # backend/app/api/endpoints/workflow.py
 
+import json
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional
 
@@ -45,6 +47,38 @@ async def start_workflow(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/projects/{project_id}/workflow/start-stream")
+async def start_workflow_stream(project_id: str):
+    """
+    启动工作流（SSE 流式返回进度）
+    事件类型：
+    - progress: 每个节点完成时发送 {stage, message}
+    - completed: 工作流完成时发送完整状态
+    - error: 出错时发送 {message}
+    """
+    async def event_generator():
+        try:
+            async for event in workflow_service.start_with_progress(project_id):
+                event_type = event.get("event", "message")
+                data = json.dumps(event.get("data", {}), ensure_ascii=False)
+                yield f"event: {event_type}\ndata: {data}\n\n"
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            error_data = json.dumps({"message": str(e)}, ensure_ascii=False)
+            yield f"event: error\ndata: {error_data}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",  # 禁用 Nginx 缓冲
+        },
+    )
+
+
 @router.post("/projects/{project_id}/workflow/select-title")
 async def select_title(
     project_id: str,
@@ -67,18 +101,12 @@ async def save_outline_config(
 ):
     """保存大纲配置并生成大纲"""
     try:
-        # 先注入配置
-        if request.outline_config:
-            await workflow_service.generate_outlines_with_config(
-                db, project_id, request.outline_config
-            )
-        # 获取状态
-        state = await workflow_service.get_state(project_id)
-        return {
-            "project_id": project_id,
-            "status": state.get("current_stage") if state else "unknown",
-            "outlines": state.get("generated_outlines", []) if state else [],
-        }
+        if not request.outline_config:
+            raise HTTPException(status_code=400, detail="outline_config is required")
+        result = await workflow_service.resume_with_outline_config(
+            db, project_id, request.outline_config
+        )
+        return {"project_id": project_id, **result}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -103,10 +131,10 @@ async def save_article_config(
     request: GenerateArticleRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    """保存文章配置"""
+    """保存文章配置并开始生成文章"""
     try:
         if request.article_config:
-            result = await workflow_service.generate_article_with_config(
+            result = await workflow_service.resume_with_article_config(
                 db, project_id, request.article_config
             )
             return {"project_id": project_id, **result}

@@ -81,3 +81,21 @@ async def wait_title_selection_node(state: ArticleState) -> dict:
         "current_stage": "title_selected",
         "messages": [],
     }
+
+
+async def wait_outline_config_node(state: ArticleState) -> dict:
+    """等待用户填写大纲生成配置"""
+    from langgraph.types import interrupt
+
+    outline_config = interrupt(
+        {
+            "action": "set_outline_config",
+            "message": "请填写大纲生成配置（字数、语调、可读性等）",
+        }
+    )
+
+    return {
+        "outline_config": outline_config,
+        "current_stage": "outline_config_set",
+        "messages": [],
+    }

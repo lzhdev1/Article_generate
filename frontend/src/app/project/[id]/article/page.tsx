@@ -146,7 +146,7 @@ export default function ArticlePage() {
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="mb-8">
           <Card>
             <CardContent className="p-8">
-              <div className="prose prose-lg max-w-none prose-headings:text-foreground prose-p:text-foreground/80 prose-a:text-primary">
+              <div className="prose prose-lg max-w-none">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>{data.article}</ReactMarkdown>
               </div>
             </CardContent>

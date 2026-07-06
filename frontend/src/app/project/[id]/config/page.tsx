@@ -2,12 +2,13 @@
 
 import { useState } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { Image, Video, ListChecks, HelpCircle, Sparkles, Plus, Minus } from "lucide-react"
+import { Image, Video, ListChecks, HelpCircle, Sparkles, Plus, Minus, Loader2 } from "lucide-react"
 import { motion } from "framer-motion"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { StepIndicator } from "@/components/ui/step-indicator"
+import { ProgressModal, ARTICLE_STATUS_MAP } from "@/components/progress-modal"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api"
 
@@ -23,9 +24,18 @@ export default function ConfigPage() {
   const [addFaq, setAddFaq] = useState(true)
   const [imageCount, setImageCount] = useState(3)
   const [faqCount, setFaqCount] = useState(5)
+  const [showProgress, setShowProgress] = useState(false)
+  const [articleStep, setArticleStep] = useState(0)
+  const [progressStatus, setProgressStatus] = useState<"running" | "completed" | "failed">("running")
+  const [progressMessage, setProgressMessage] = useState("")
 
   const handleSubmit = async () => {
     setIsSubmitting(true)
+    setShowProgress(true)
+    setProgressStatus("running")
+    setArticleStep(0)
+    setProgressMessage("")
+
     try {
       const configRes = await fetch(`${API_URL}/projects/${projectId}/workflow/save-article-config`, {
         method: "POST",
@@ -35,23 +45,44 @@ export default function ConfigPage() {
         }),
       })
 
-      if (configRes.ok) {
-        // 文章生成已触发，跳转到生成进度页
-        router.push(`/project/${projectId}/generating`)
-      } else {
-        console.error("Failed to save article config")
-      }
+      if (!configRes.ok) throw new Error("保存配置失败")
+
+      // 轮询状态
+      const pollInterval = setInterval(async () => {
+        try {
+          const res = await fetch(`${API_URL}/projects/${projectId}/workflow/state`)
+          if (res.ok) {
+            const data = await res.json()
+            const stage = data.current_stage || "unknown"
+            const idx = ARTICLE_STATUS_MAP[stage] ?? 0
+            setArticleStep(idx)
+
+            if (stage === "completed" || data.data?.article) {
+              setProgressStatus("completed")
+              setProgressMessage("文章生成完成！")
+              clearInterval(pollInterval)
+
+              setTimeout(() => {
+                setShowProgress(false)
+                router.push(`/project/${projectId}/article`)
+              }, 1500)
+            }
+          }
+        } catch (err) {
+          console.error(err)
+        }
+      }, 2000)
+
     } catch (err) {
       console.error(err)
+      setProgressStatus("failed")
+      setProgressMessage(err instanceof Error ? err.message : "发生错误")
     } finally {
       setIsSubmitting(false)
     }
   }
 
   const steps = [
-    { id: "search", label: "搜索", status: "completed" },
-    { id: "filter", label: "过滤", status: "completed" },
-    { id: "extract", label: "提取", status: "completed" },
     { id: "title", label: "标题", status: "completed" },
     { id: "outline", label: "大纲", status: "completed" },
     { id: "config", label: "配置", status: "current" },
@@ -135,12 +166,31 @@ export default function ConfigPage() {
 
         {/* 按钮 */}
         <div className="mt-8 flex justify-end">
-          <Button size="xl" onClick={handleSubmit} isLoading={isSubmitting}>
-            <Sparkles className="mr-2 h-5 w-5" />
-            开始生成文章
+          <Button size="xl" onClick={handleSubmit} disabled={isSubmitting}>
+            {isSubmitting ? (
+              <>
+                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                生成中...
+              </>
+            ) : (
+              <>
+                <Sparkles className="mr-2 h-5 w-5" />
+                开始生成文章
+              </>
+            )}
           </Button>
         </div>
       </div>
+
+      {/* 进度弹窗 */}
+      <ProgressModal
+        isOpen={showProgress}
+        mode="article"
+        currentStep={articleStep}
+        status={progressStatus}
+        message={progressMessage}
+        topic={""}
+      />
     </div>
   )
 }

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { motion } from "framer-motion"
-import { Check, Loader2, FileText, ChevronDown, ChevronUp } from "lucide-react"
+import { FileText, ChevronDown, ChevronUp, ArrowRight, Check, Edit3 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
@@ -28,7 +28,7 @@ interface Outline {
 
 const styleLabels: Record<string, string> = {
   comprehensive: "全面系统型",
-  problem_solution: "问题-解决型",
+  problem_solution: "问题 - 解决型",
   step_by_step: "循序渐进型",
   comparison: "对比分析型",
   case_study: "案例分析型",
@@ -41,8 +41,8 @@ export default function OutlinesPage() {
   const projectId = params.id as string
   const [outlines, setOutlines] = useState<Outline[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [selectingIndex, setSelectingIndex] = useState<number | null>(null)
-  const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
+  const [editingIndex, setEditingIndex] = useState<number | null>(null)
+  const [selectedOutline, setSelectedOutline] = useState<Outline | null>(null)
   const [expandedId, setExpandedId] = useState<number | null>(null)
 
   useEffect(() => {
@@ -63,31 +63,29 @@ export default function OutlinesPage() {
     }
   }
 
-  const handleSelect = async (outline: Outline, index: number) => {
-    setSelectingIndex(index)
+  const handleSelect = (outline: Outline, index: number) => {
+    setSelectedOutline(outline)
+    setEditingIndex(index)
+  }
+
+  const handleNextStep = async () => {
+    if (!selectedOutline) return
+
     try {
       const res = await fetch(`${API_URL}/projects/${projectId}/workflow/select-outline`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ outline }),
+        body: JSON.stringify({ outline: selectedOutline }),
       })
-
       if (res.ok) {
-        setSelectedIndex(index)
-        setTimeout(() => {
-          router.push(`/project/${projectId}/config`)
-        }, 1000)
+        router.push(`/project/${projectId}/config`)
       }
     } catch (err) {
       console.error(err)
-      setSelectingIndex(null)
     }
   }
 
   const steps = [
-    { id: "search", label: "搜索", status: "completed" },
-    { id: "filter", label: "过滤", status: "completed" },
-    { id: "extract", label: "提取", status: "completed" },
     { id: "title", label: "标题", status: "completed" },
     { id: "outline", label: "大纲", status: "current" },
     { id: "config", label: "配置", status: "upcoming" },
@@ -110,13 +108,14 @@ export default function OutlinesPage() {
         <StepIndicator steps={steps} className="mb-8" />
 
         <div className="mb-8 text-center">
-          <h1 className="text-3xl font-bold text-foreground">请选择一个大纲</h1>
-          <p className="mt-2 text-muted-foreground">为您生成了{outlines.length}个不同风格的大纲</p>
+          <h1 className="text-3xl font-bold text-foreground">请选择或调整大纲</h1>
+          <p className="mt-2 text-muted-foreground">为您生成了{outlines.length}个不同风格的大纲，选择一个进行编辑</p>
         </div>
 
         <div className={cn("grid gap-6", outlines.length >= 3 ? "md:grid-cols-3" : "md:grid-cols-2")}>
           {outlines.map((outline, index) => {
             const sections = outline.content?.sections || []
+            const isSelected = editingIndex === index
 
             return (
               <motion.div
@@ -128,7 +127,7 @@ export default function OutlinesPage() {
                 <Card
                   className={cn(
                     "flex h-full flex-col transition-all duration-300",
-                    selectedIndex === index
+                    isSelected
                       ? "border-primary bg-primary/5 shadow-lg shadow-primary/20"
                       : "hover:border-primary/30 hover:shadow-md"
                   )}
@@ -195,16 +194,13 @@ export default function OutlinesPage() {
                     )}
                   </CardContent>
 
-                  <CardFooter>
+                  <CardFooter className="flex gap-2">
                     <Button
-                      className="w-full"
-                      variant={selectedIndex === index ? "default" : "outline"}
+                      className="flex-1"
+                      variant={editingIndex === index ? "default" : "outline"}
                       onClick={() => handleSelect(outline, index)}
-                      disabled={selectingIndex !== null}
                     >
-                      {selectingIndex === index ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : selectedIndex === index ? (
+                      {editingIndex === index ? (
                         <>
                           <Check className="mr-2 h-4 w-4" />
                           已选择
@@ -213,12 +209,38 @@ export default function OutlinesPage() {
                         "选择此大纲"
                       )}
                     </Button>
+                    {editingIndex === index && (
+                      <Button
+                        variant="secondary"
+                        onClick={() => {
+                          sessionStorage.setItem(`outline-edit-${projectId}`, JSON.stringify(outline))
+                          router.push(`/project/${projectId}/outlines/edit`)
+                        }}
+                      >
+                        <Edit3 className="mr-1 h-4 w-4" />
+                        编辑
+                      </Button>
+                    )}
                   </CardFooter>
                 </Card>
               </motion.div>
             )
           })}
         </div>
+
+        {/* 下一步按钮 */}
+        {selectedOutline && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mt-8 flex justify-center"
+          >
+            <Button size="lg" onClick={handleNextStep} className="px-8">
+              确认大纲，进入配置
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </Button>
+          </motion.div>
+        )}
       </div>
     </div>
   )

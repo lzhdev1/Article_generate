@@ -49,12 +49,10 @@ article-generator/
 │       │   ├── state.py           # 全局状态定义
 │       │   ├── llm.py             # LLM 工厂函数
 │       │   └── nodes/             # 工作流节点
-│       │       ├── search.py      # 网络搜索节点
-│       │       ├── filter.py      # 内容过滤节点
-│       │       ├── extract.py     # 知识提取(RAG)节点
-│       │       ├── title.py       # 标题生成 + HITL 选择
-│       │       ├── outline.py     # 大纲生成 + HITL 选择
-│       │       └── article.py     # 文章生成 + 验证
+│       │       ├── title_generate.py   # 标题生成 (4个子步骤)
+│       │       ├── outline_generate.py # 大纲生成 (4个子步骤)
+│       │       ├── article_generate.py # 文章生成 (3个子步骤)
+│       │       └── final_config.py     # HITL 配置节点
 │       └── services/
 │           └── workflow_service.py # 工作流编排服务
 │
@@ -133,46 +131,50 @@ docker compose down -v
 │  首页 → 处理进度 → 标题选择 → 大纲配置 → 大纲选择              │
 │  → 最终配置 → 生成进度 → 文章展示                              │
 └──────────────────────────┬──────────────────────────────────┘
-                           │ REST API
+                           │ REST API + SSE
                            ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                    Backend (FastAPI + LangGraph)              │
 │                                                              │
-│  StateGraph: search → filter → extract → title_gen           │
-│              → [HITL: 选标题] → outline_gen                  │
-│              → [HITL: 选大纲] → article_gen → verify         │
-│              → [pass/retry/fail] → output                    │
+│  StateGraph: title_search → title_filter → title_analyze     │
+│              → title_generate → [HITL: 选标题]               │
+│              → outline_search → outline_extract              │
+│              → outline_analyze → outline_generate            │
+│              → [HITL: 选大纲] → article_match_evidence       │
+│              → article_search → article_generate             │
+│              → [HITL: 文章配置] → END                        │
 │                                                              │
-│  RAG: WebBaseLoader → TextSplitter → PGVector → Retriever    │
 └──────────┬─────────────────────────────┬────────────────────
            │                             │
      ┌─────▼──────┐              ┌──────▼──────┐
      │ PostgreSQL  │              │    Redis    │
-     │  主数据库   │              │ 缓存/状态   │
+     │  主数据库   │              │ 缓存/消息   │
      └────────────┘              └─────────────┘
 ```
 
 ### 工作流节点说明
 
-| 节点 | 功能 | 技术 |
-|------|------|------|
-| `search` | LLM生成关键词 → Google 搜索 → 爬取全文 | httpx + BeautifulSoup4 |
-| `filter` | LLM对每篇文章评分(0-1)，过滤不相关内容 | LangChain PromptTemplate |
-| `extract_knowledge` | 文本切分 → Embedding → PGVector存储 → 语义检索 | LangChain RAG |
-| `generate_titles` | 基于知识生成5个不同风格的标题 | Qwen-Max |
-| `wait_title_selection` | **Human-in-the-Loop**：暂停等待用户选择 | LangGraph interrupt |
-| `generate_outlines` | 分析文章风格，生成3种不同结构的大纲 | Qwen-Max |
-| `wait_outline_selection` | **Human-in-the-Loop**：暂停等待用户选择 | LangGraph interrupt |
-| `generate_article` | 逐章节生成文章，每章节检索相关知识 | Qwen-Max + RAG |
-| `verify_article` | 验证事实准确性、逻辑一致性、信息时效性 | Qwen-Max |
-| `format_output` | 生成要点总结和FAQ，格式化输出 | Qwen-Max |
+| 主节点 | 子步骤 | 功能 | 技术 |
+|------|------|------|------|
+| **title_generate** | search | LLM生成关键词 → 联网搜索（DashScope enable_search） → 爬取全文 | httpx + BeautifulSoup4 |
+| | filter | LLM分析内容，过滤低质量文章 | LangChain PromptTemplate |
+| | analyze | 总结筛选后的搜索结果，提取关键信息 | Qwen-Max |
+| | generate | 基于总结内容生成至少5个不同风格的标题 | Qwen-Max |
+| **outline_generate** | search | 分析标题+配置，搜索相关内容 | Qwen-Max |
+| | extract | 提取参考文章的结构和风格 | Qwen-Max |
+| | analyze | 生成专业的大纲生成 prompt | Qwen-Max |
+| | generate | 根据prompt生成至少2个大纲方案 | Qwen-Max |
+| **final_config** | config | 用户填写文章生成配置（图片、视频、总结、FAQ等） | Human-in-the-Loop |
+| **article_generate** | match_evidence | 分析标题和大纲，确定需要什么类型的证据 | Qwen-Max |
+| | search | 根据证据需求联网搜索相关内容 | httpx + BeautifulSoup4 |
+| | generate | 基于大纲和搜索内容生成文章 | Qwen-Max |
 
 ### 关键设计决策
 
-1. **LangGraph interrupt/resume 机制**：标题和大纲选择时暂停工作流，等待用户输入后继续，避免全自动化导致质量不可控
-2. **RAG 知识管理**：不把所有参考文章塞入 Prompt，而是通过向量检索精准注入每章节最相关的知识片段
-3. **条件路由验证循环**：文章生成后自动验证，不通过则重新生成（最多3次）
-4. **分阶段 API**：每个用户交互点对应一个独立 API 端点，前端按需调用
+1. **子步骤进度显示**：每个主节点的子步骤作为独立的 LangGraph 节点执行，通过 SSE（Server-Sent Events）实时推送进度到前端，用户可以看到每个子步骤的执行状态
+2. **LangGraph interrupt/resume 机制**：标题和大纲选择时暂停工作流，等待用户输入后继续，避免全自动化导致质量不可控
+3. **分阶段 API**：每个用户交互点对应一个独立 API 端点，前端按需调用
+4. **SSE 实时进度**：使用 `StreamingResponse` 和 `text/event-stream` 实现 Server-Sent Events，前端通过 `EventSource` 接收进度更新
 
 ## 开发指南
 

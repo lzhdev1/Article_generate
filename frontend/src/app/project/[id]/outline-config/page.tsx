@@ -8,6 +8,7 @@ import { ArrowLeft, ArrowRight, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { StepIndicator } from "@/components/ui/step-indicator"
+import { ProgressModal, OUTLINE_STATUS_MAP } from "@/components/progress-modal"
 import { cn } from "@/lib/utils"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api"
@@ -52,12 +53,21 @@ export default function OutlineConfigPage() {
   const [tone, setTone] = useState("professional")
   const [pov, setPov] = useState("third_person")
   const [requirements, setRequirements] = useState("")
+  const [showProgress, setShowProgress] = useState(false)
+  const [outlineStep, setOutlineStep] = useState(0)
+  const [progressStatus, setProgressStatus] = useState<"running" | "completed" | "failed">("running")
+  const [progressMessage, setProgressMessage] = useState("")
 
   const handleSubmit = async () => {
     setIsSubmitting(true)
+    setShowProgress(true)
+    setProgressStatus("running")
+    setOutlineStep(0)
+    setProgressMessage("")
+
     try {
-      // 保存配置并继续工作流
-      const res = await fetch(`${API_URL}/projects/${projectId}/workflow/save-outline-config`, {
+      // 保存配置
+      const configRes = await fetch(`${API_URL}/projects/${projectId}/workflow/save-outline-config`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -71,20 +81,44 @@ export default function OutlineConfigPage() {
         }),
       })
 
-      if (res.ok) {
-        router.push(`/project/${projectId}/outlines`)
-      }
+      if (!configRes.ok) throw new Error("保存配置失败")
+
+      // 轮询状态
+      const pollInterval = setInterval(async () => {
+        try {
+          const res = await fetch(`${API_URL}/projects/${projectId}/workflow/state`)
+          if (res.ok) {
+            const data = await res.json()
+            const stage = data.current_stage || "unknown"
+            const idx = OUTLINE_STATUS_MAP[stage] ?? 0
+            setOutlineStep(idx)
+
+            if (stage === "outline_generated" || data.data?.outlines?.length > 0) {
+              setProgressStatus("completed")
+              setProgressMessage("大纲生成完成！")
+              clearInterval(pollInterval)
+
+              setTimeout(() => {
+                setShowProgress(false)
+                router.push(`/project/${projectId}/outlines`)
+              }, 1500)
+            }
+          }
+        } catch (err) {
+          console.error(err)
+        }
+      }, 2000)
+
     } catch (err) {
       console.error(err)
+      setProgressStatus("failed")
+      setProgressMessage(err instanceof Error ? err.message : "发生错误")
     } finally {
       setIsSubmitting(false)
     }
   }
 
   const steps = [
-    { id: "search", label: "搜索", status: "completed" },
-    { id: "filter", label: "过滤", status: "completed" },
-    { id: "extract", label: "提取", status: "completed" },
     { id: "title", label: "标题", status: "completed" },
     { id: "outline", label: "大纲", status: "current" },
     { id: "config", label: "配置", status: "upcoming" },
@@ -222,8 +256,13 @@ export default function OutlineConfigPage() {
             <ArrowLeft className="mr-2 h-4 w-4" />
             上一步
           </Button>
-          <Button size="lg" onClick={handleSubmit} isLoading={isSubmitting}>
-            {isSubmitting ? null : (
+          <Button size="lg" onClick={handleSubmit} disabled={isSubmitting}>
+            {isSubmitting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                生成中...
+              </>
+            ) : (
               <>
                 生成大纲
                 <ArrowRight className="ml-2 h-4 w-4" />
@@ -232,6 +271,16 @@ export default function OutlineConfigPage() {
           </Button>
         </div>
       </div>
+
+      {/* 进度弹窗 */}
+      <ProgressModal
+        isOpen={showProgress}
+        mode="outline"
+        currentStep={outlineStep}
+        status={progressStatus}
+        message={progressMessage}
+        topic={""}
+      />
     </div>
   )
 }

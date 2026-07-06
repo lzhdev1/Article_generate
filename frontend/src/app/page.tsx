@@ -40,16 +40,17 @@ export default function HomePage() {
     setError("")
 
     if (topic.trim().length < 2) {
-      setError("请输入至少2个字符")
+      setError("请输入至少 2 个字符")
       return
     }
     if (topic.length > 200) {
-      setError("请输入不超过200个字符")
+      setError("请输入不超过 200 个字符")
       return
     }
 
     setIsSubmitting(true)
     try {
+      // 创建项目
       const res = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api"}/projects`,
         {
@@ -62,7 +63,10 @@ export default function HomePage() {
       if (!res.ok) throw new Error("创建项目失败")
 
       const data = await res.json()
-      router.push(`/project/${data.project_id}/processing`)
+      const newProjectId = data.project_id
+
+      // 立即跳转到处理进度页面（使用 SSE 实时显示进度）
+      router.push(`/project/${newProjectId}/processing`)
     } catch (err) {
       setError(err instanceof Error ? err.message : "发生错误，请重试")
     } finally {
@@ -157,7 +161,7 @@ export default function HomePage() {
         animate={{ opacity: 1 }}
         transition={{ delay: 1 }}
       >
-        由阿里云百炼提供AI能力支持
+        由阿里云百炼提供 AI 能力支持
       </motion.p>
     </div>
   )
